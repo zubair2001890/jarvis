@@ -661,6 +661,53 @@ async def get_session(session_id: str):
     with open(session_file) as f:
         return json.load(f)
 
+@app.post("/sessions/{session_id}/feedback")
+async def add_feedback(session_id: str, request: Request):
+    """Add feedback to a session - what insights were missed, what could be better."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    feedback_data = await request.json()
+
+    with open(session_file) as f:
+        session = json.load(f)
+
+    if "feedback" not in session:
+        session["feedback"] = []
+
+    session["feedback"].append({
+        "timestamp": datetime.now().isoformat(),
+        "missed_insights": feedback_data.get("missed_insights", ""),
+        "what_would_help": feedback_data.get("what_would_help", ""),
+        "rating": feedback_data.get("rating", 0),
+        "notes": feedback_data.get("notes", "")
+    })
+
+    with open(session_file, "w") as f:
+        json.dump(session, f, indent=2)
+
+    return {"status": "feedback saved"}
+
+@app.get("/feedback/all")
+async def get_all_feedback():
+    """Get all feedback across sessions for training/improvement."""
+    all_feedback = []
+    for f in SESSIONS_DIR.glob("*.json"):
+        try:
+            with open(f) as file:
+                data = json.load(file)
+                if data.get("feedback"):
+                    all_feedback.append({
+                        "session_id": data.get("session_id"),
+                        "transcript": data.get("full_transcript", "")[:500],
+                        "insights_given": data.get("insights", []),
+                        "feedback": data.get("feedback", [])
+                    })
+        except:
+            pass
+    return {"feedback": all_feedback}
+
 # =============================================================================
 # Run
 # =============================================================================
