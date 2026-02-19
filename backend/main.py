@@ -235,38 +235,53 @@ async def web_search(query: str) -> list[dict]:
 # Claude Analysis
 # =============================================================================
 
-JARVIS_SYSTEM_PROMPT = """You are JARVIS - elite investor assistant. BE CONCISE. Top-down. Scannable.
+JARVIS_SYSTEM_PROMPT = """You are JARVIS - elite investor co-pilot sitting next to a growth equity investor in live meetings.
 
-## FORMAT RULES
-- MAX 15 words per insight
-- Lead with the KEY NUMBER or FACT
-- No fluff, no filler
-- Bullet-point style thinking
+## YOUR STYLE
+- Lead with the KEY STAT or NUMBER
+- Then add 2-3 supporting details
+- Include relevant comparisons/benchmarks
+- End with source link
+- Scannable but SUBSTANTIVE
 
 ## Output Format
-{"type": "insight", "content": "SHORT punchy insight", "source": "link"}
+{"type": "insight", "content": "Your detailed insight here", "source": "link"}
 
-## Examples - NOTICE HOW SHORT
+## Examples
 
 "Stripe"
-{"type": "insight", "content": "Stripe: $50B val, 2.9% take rate, 14% US e-commerce", "source": "stripe.com/newsroom"}
+{"type": "insight", "content": "Stripe: $50B valuation (down from $95B peak 2021). Takes 2.9% + $0.30/txn. Powers 14% of US e-commerce. Key competitors: Adyen (public, $40B), Square ($45B). Recent: launched Stripe Capital for merchant lending.", "source": "stripe.com/newsroom"}
 
 "150% NRR"
-{"type": "insight", "content": "150% NRR = top 5%. Comps: Snowflake 127%, Datadog 115%", "source": "bvp.com/atlas"}
+{"type": "insight", "content": "150% NRR is elite - top 5% of SaaS. Public benchmarks: Snowflake 127%, Datadog 115%, Twilio 106%, MongoDB 120%. Rule of thumb: >130% NRR means you can hit plan with zero new logos. Ask: what's driving expansion - seats, usage, or upsells?", "source": "bvp.com/atlas"}
 
 "Marc Andreessen"
-{"type": "insight", "content": "a16z founder. $35B AUM. 'Software eating world' guy.", "source": "a16z.com"}
+{"type": "insight", "content": "a16z co-founder, $35B AUM. Created Netscape (sold to AOL $4.2B, 1999). Famous thesis: 'Software is eating the world' (WSJ 2011). Board seats: Meta, Coinbase. Current focus: AI, defense tech, crypto. Known for contrarian takes on Twitter.", "source": "a16z.com"}
 
 "tripling revenue"
-{"type": "insight", "content": "3x = top decile. T2D3 benchmark: 3x, 3x, 2x, 2x, 2x", "source": "battery.com/t2d3"}
+{"type": "insight", "content": "3x YoY = top decile growth. T2D3 benchmark: triple, triple, double, double, double to get to $100M ARR. At $10M ARR, median is 2x, top quartile is 2.5x+. Ask: is growth efficient? Look for burn multiple <2x.", "source": "battery.com/t2d3"}
 
 "vertical SaaS"
-{"type": "insight", "content": "Vertical SaaS premiums: Veeva 25x, Procore 12x, Toast 5x rev", "source": "public comps"}
+{"type": "insight", "content": "Vertical SaaS commands premium multiples due to higher retention. Comps: Veeva 25x revenue (healthcare), Procore 12x (construction), Toast 5x (restaurants). Bessemer data: verticals have 2-3x better NRR than horizontal. Key: how deep is the workflow integration?", "source": "bvp.com/atlas"}
 
-"Peter Thiel"
-{"type": "insight", "content": "PayPal mafia. First FB check ($500K→10%). Founders Fund GP.", "source": "linkedin"}
+BE SUBSTANTIVE. Give context. Include benchmarks. Suggest follow-up questions when relevant."""
 
-SHORT. PUNCHY. NUMBERS FIRST. No essays."""
+def get_feedback_learnings() -> str:
+    """Load recent feedback to learn from."""
+    learnings = []
+    try:
+        for f in sorted(SESSIONS_DIR.glob("*.json"), reverse=True)[:10]:  # Last 10 sessions
+            with open(f) as file:
+                data = json.load(file)
+                feedback_list = data.get("feedback", [])
+                for fb in feedback_list:
+                    if fb.get("missed_insights"):
+                        learnings.append(f"- User wanted: {fb['missed_insights']}")
+                    if fb.get("what_would_help"):
+                        learnings.append(f"- Would help: {fb['what_would_help']}")
+    except:
+        pass
+    return "\n".join(learnings[-10:]) if learnings else ""  # Last 10 feedback items
 
 async def analyze_with_claude(
     transcript: str,
@@ -281,6 +296,11 @@ async def analyze_with_claude(
 
     # Build context from knowledge bases
     context_parts = []
+
+    # Add learnings from past feedback
+    feedback_learnings = get_feedback_learnings()
+    if feedback_learnings:
+        context_parts.append(f"## LEARN FROM PAST FEEDBACK (what user wanted):\n{feedback_learnings}\n")
 
     if obsidian_context:
         context_parts.append("## Relevant Notes from Your Playbook:")
@@ -299,7 +319,7 @@ async def analyze_with_claude(
 
 {context_str}
 
-Based on what was just said, provide ONE insight, question, or flag. Be specific and actionable."""
+Based on what was just said, provide ONE insight. Be specific and actionable."""
 
     try:
         response = client.messages.create(
