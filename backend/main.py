@@ -16,6 +16,8 @@ import anthropic
 import httpx
 import websockets as ws_client
 from dotenv import load_dotenv
+import yfinance as yf
+from duckduckgo_search import DDGS
 
 # Session storage directory
 SESSIONS_DIR = Path(__file__).parent / "sessions"
@@ -271,6 +273,86 @@ If it's just small talk, filler, or nothing actionable → return {"type": "skip
 
 Be selective. Quality over quantity."""
 
+# =============================================================================
+# Live Data Functions
+# =============================================================================
+
+def search_web(query: str, max_results: int = 3) -> str:
+    """Search the web using DuckDuckGo."""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            if not results:
+                return "No results found."
+            output = []
+            for r in results:
+                output.append(f"**{r['title']}**\n{r['body']}\nSource: {r['href']}")
+            return "\n\n".join(output)
+    except Exception as e:
+        return f"Search error: {str(e)}"
+
+def get_stock_data(ticker: str) -> str:
+    """Get stock/company data from Yahoo Finance."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        # Extract key metrics
+        data = {
+            "name": info.get("longName", ticker),
+            "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+            "market_cap": info.get("marketCap"),
+            "ev": info.get("enterpriseValue"),
+            "revenue": info.get("totalRevenue"),
+            "ebitda": info.get("ebitda"),
+            "gross_profit": info.get("grossProfits"),
+            "pe_ratio": info.get("trailingPE"),
+            "ps_ratio": info.get("priceToSalesTrailing12Months"),
+            "52w_high": info.get("fiftyTwoWeekHigh"),
+            "52w_low": info.get("fiftyTwoWeekLow"),
+        }
+
+        # Format output
+        lines = [f"**{data['name']} ({ticker.upper()})**"]
+        if data['price']: lines.append(f"• Price: ${data['price']:,.2f}")
+        if data['market_cap']: lines.append(f"• Market Cap: ${data['market_cap']/1e9:,.1f}B")
+        if data['ev']: lines.append(f"• Enterprise Value: ${data['ev']/1e9:,.1f}B")
+        if data['revenue']: lines.append(f"• Revenue (TTM): ${data['revenue']/1e9:,.1f}B")
+        if data['ebitda']: lines.append(f"• EBITDA: ${data['ebitda']/1e9:,.1f}B")
+        if data['gross_profit']: lines.append(f"• Gross Profit: ${data['gross_profit']/1e9:,.1f}B")
+        if data['ev'] and data['revenue']: lines.append(f"• EV/Revenue: {data['ev']/data['revenue']:,.1f}x")
+        if data['ev'] and data['ebitda']: lines.append(f"• EV/EBITDA: {data['ev']/data['ebitda']:,.1f}x")
+        if data['ev'] and data['gross_profit']: lines.append(f"• EV/GP: {data['ev']/data['gross_profit']:,.1f}x")
+        if data['pe_ratio']: lines.append(f"• P/E: {data['pe_ratio']:,.1f}x")
+
+        return "\n".join(lines) + f"\nSource: finance.yahoo.com/quote/{ticker.upper()}"
+    except Exception as e:
+        return f"Could not fetch data for {ticker}: {str(e)}"
+
+def get_live_context(query: str) -> str:
+    """Get live context - tries stock data first, then web search."""
+    # Common company -> ticker mappings
+    ticker_map = {
+        "apple": "AAPL", "microsoft": "MSFT", "google": "GOOGL", "alphabet": "GOOGL",
+        "amazon": "AMZN", "meta": "META", "facebook": "META", "nvidia": "NVDA",
+        "tesla": "TSLA", "netflix": "NFLX", "salesforce": "CRM", "adobe": "ADBE",
+        "snowflake": "SNOW", "datadog": "DDOG", "mongodb": "MDB", "crowdstrike": "CRWD",
+        "palantir": "PLTR", "stripe": "STRIPE", "shopify": "SHOP", "zoom": "ZM",
+        "slack": "WORK", "twilio": "TWLO", "okta": "OKTA", "cloudflare": "NET",
+        "confluent": "CFLT", "hashicorp": "HCP", "gitlab": "GTLB", "jfrog": "FROG",
+    }
+
+    # Check if it's asking about a public company
+    query_lower = query.lower()
+    for company, ticker in ticker_map.items():
+        if company in query_lower:
+            stock_data = get_stock_data(ticker)
+            if "Could not fetch" not in stock_data:
+                return stock_data
+
+    # Otherwise do a web search
+    return search_web(query)
+
 def get_feedback_learnings() -> str:
     """Load recent feedback to learn from."""
     learnings = []
@@ -307,6 +389,15 @@ async def analyze_with_claude(
     if feedback_learnings:
         context_parts.append(f"## LEARN FROM PAST FEEDBACK (what user wanted):\n{feedback_learnings}\n")
 
+    # Get live data based on transcript (companies, metrics mentioned)
+    # Extract potential search queries from transcript
+    try:
+        live_data = get_live_context(transcript)
+        if live_data and "No results" not in live_data and "error" not in live_data.lower():
+            context_parts.append(f"## LIVE DATA (real-time, verified):\n{live_data}\n")
+    except Exception as e:
+        print(f"Live data fetch error: {e}", flush=True)
+
     if obsidian_context:
         context_parts.append("## Relevant Notes from Your Playbook:")
         for note in obsidian_context:
@@ -324,7 +415,7 @@ async def analyze_with_claude(
 
 {context_str}
 
-Based on what was just said, provide ONE insight. Be specific and actionable."""
+Based on what was just said, provide ONE insight using the LIVE DATA if available. Include real numbers and hyperlink sources."""
 
     try:
         response = client.messages.create(
