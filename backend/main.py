@@ -237,30 +237,26 @@ async def web_search(query: str) -> list[dict]:
 # Claude Analysis
 # =============================================================================
 
-JARVIS_SYSTEM_PROMPT = """You are JARVIS - rapid investor co-pilot. Be FAST.
+JARVIS_SYSTEM_PROMPT = """You are JARVIS - elite investor co-pilot for growth equity meetings.
 
 ## WHEN TO RESPOND
-- Company/person/fund mentioned → context
+- Company/person/fund mentioned → give context
 - Metric discussed → benchmark it
-- Question asked → answer
-- Small talk → {"type": "skip"}
+- Question asked → answer it
+- Small talk/filler → {"type": "skip"}
 
-## STYLE
-**Bold headline**
-• Bullet 1
-• Bullet 2
-Source: link
+## STYLE: McKinsey top-down
+**Bold headline** (answer in 1 line)
+• Key fact 1
+• Key fact 2
+• Benchmark/comp
+Source: [link]
 
 ## Output: JSON only
 {"type": "insight", "content": "...", "source": "..."}
 {"type": "skip"}
 
-## Examples
-"Datadog" → {"type": "insight", "content": "**Datadog: Leader in observability**\n• ~$40B market cap, 10-12x EV/Revenue\n• Comps: Dynatrace, Splunk, Elastic\n• 120%+ NRR, land-and-expand model", "source": "finance.yahoo.com/quote/DDOG"}
-
-"Nice to meet you" → {"type": "skip"}
-
-Be fast. Be useful. Skip noise."""
+Be substantive but fast. Use your knowledge for context. Skip noise."""
 
 # =============================================================================
 # Live Data Functions
@@ -395,43 +391,82 @@ async def analyze_with_claude(
 
 {context_str}
 
-Based on what was just said, provide ONE insight. Use tools to get real-time data if needed."""
+Based on what was just said, provide ONE insight."""
 
-    # Define tools for Claude to use
+    # Smart routing: detect if real-time data is needed
+    realtime_keywords = ["current price", "market cap", "latest", "stock price", "trading at", "ev/revenue", "ev/ebitda", "what's the multiple", "valuation today"]
+    needs_realtime = any(kw in transcript.lower() for kw in realtime_keywords)
+
+    # Define tools for real-time data
     tools = [
         {
             "name": "get_stock_data",
-            "description": "Get real-time stock data including price, market cap, EV, revenue, and valuation multiples (EV/Revenue, EV/EBITDA, EV/GP) for a public company",
+            "description": "Get real-time stock data: price, market cap, EV, revenue, multiples",
             "input_schema": {
                 "type": "object",
-                "properties": {
-                    "ticker": {"type": "string", "description": "Stock ticker symbol (e.g., SNOW, DDOG, AAPL)"}
-                },
+                "properties": {"ticker": {"type": "string", "description": "Stock ticker (e.g., SNOW, DDOG)"}},
                 "required": ["ticker"]
             }
         },
         {
             "name": "web_search",
-            "description": "Search the web for recent news, facts, or information about a topic",
+            "description": "Search web for recent news/facts",
             "input_schema": {
                 "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query"}
-                },
+                "properties": {"query": {"type": "string", "description": "Search query"}},
                 "required": ["query"]
             }
         }
     ]
 
     try:
-        # Fast response - use Sonnet without tools for speed
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=300,
-            system=JARVIS_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}]
-        )
-        print(f"Claude done (fast mode)", flush=True)
+        if needs_realtime:
+            # Use tools for real-time data
+            print(f"Using tools (real-time data requested)", flush=True)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=400,
+                system=JARVIS_SYSTEM_PROMPT,
+                tools=tools,
+                messages=[{"role": "user", "content": user_message}]
+            )
+
+            # Handle tool calls (max 1 round)
+            if response.stop_reason == "tool_use":
+                tool_results = []
+                for block in response.content:
+                    if block.type == "tool_use":
+                        print(f"  Tool: {block.name}({block.input})", flush=True)
+                        if block.name == "get_stock_data":
+                            result = get_stock_data(block.input["ticker"])
+                        elif block.name == "web_search":
+                            result = search_web(block.input["query"])
+                        else:
+                            result = "Unknown tool"
+                        tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
+
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=400,
+                    system=JARVIS_SYSTEM_PROMPT,
+                    tools=tools,
+                    messages=[
+                        {"role": "user", "content": user_message},
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": tool_results}
+                    ]
+                )
+        else:
+            # Fast mode - no tools, just Claude's knowledge
+            print(f"Fast mode (no tools)", flush=True)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=300,
+                system=JARVIS_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}]
+            )
+
+        print(f"Claude done", flush=True)
 
         # Parse JSON response - find text block
         content = ""
