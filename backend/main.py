@@ -424,7 +424,7 @@ Based on what was just said, provide ONE insight."""
             # Use tools for real-time data
             print(f"Using tools (real-time data requested)", flush=True)
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-opus-4-6",
                 max_tokens=400,
                 system=JARVIS_SYSTEM_PROMPT,
                 tools=tools,
@@ -446,7 +446,7 @@ Based on what was just said, provide ONE insight."""
                         tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
 
                 response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-opus-4-6",
                     max_tokens=400,
                     system=JARVIS_SYSTEM_PROMPT,
                     tools=tools,
@@ -460,7 +460,7 @@ Based on what was just said, provide ONE insight."""
             # Fast mode - no tools, just Claude's knowledge
             print(f"Fast mode (no tools)", flush=True)
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-opus-4-6",
                 max_tokens=300,
                 system=JARVIS_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_message}]
