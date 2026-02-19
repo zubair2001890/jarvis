@@ -340,7 +340,8 @@ async def audio_websocket(websocket: WebSocket):
     try:
         # Connect to Deepgram streaming API
         deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true"
-        print(f"Connecting to Deepgram with key: {DEEPGRAM_API_KEY[:10]}...")
+        import sys
+        print(f"Connecting to Deepgram with key: {DEEPGRAM_API_KEY[:10]}...", flush=True)
 
         try:
             deepgram_ws = await ws_client.connect(
@@ -366,12 +367,12 @@ async def audio_websocket(websocket: WebSocket):
             try:
                 async for message in deepgram_ws:
                     data = json.loads(message)
-                    print(f"Deepgram msg type: {data.get('type')}")
+                    print(f"Deepgram msg type: {data.get('type')}", flush=True)
 
                     if data.get("type") == "Results":
                         transcript = data.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
                         is_final = data.get("is_final", False)
-                        print(f"Transcript: '{transcript}' (final={is_final})")
+                        print(f"Transcript: '{transcript}' (final={is_final})", flush=True)
 
                         if transcript:
                             # Send to UI
@@ -391,14 +392,14 @@ async def audio_websocket(websocket: WebSocket):
 
                                 # Analyze with Claude every 10 seconds if we have content
                                 now = datetime.now()
-                                print(f"Transcript length: {len(full_transcript)}, seconds since last: {(now - last_analysis_time).seconds}")
-                                if (now - last_analysis_time).seconds >= 10 and len(full_transcript) > 200:
+                                print(f"Transcript length: {len(full_transcript)}, seconds since last: {(now - last_analysis_time).seconds}", flush=True)
+                                if (now - last_analysis_time).seconds >= 10 and len(full_transcript) > 50:
                                     last_analysis_time = now
-                                    print("Calling Claude for analysis...")
+                                    print("Calling Claude for analysis...", flush=True)
 
                                     # Run Claude analysis
                                     insight = await analyze_with_claude(full_transcript[-2000:])
-                                    print(f"Claude response: {insight}")
+                                    print(f"Claude response: {insight}", flush=True)
 
                                     if insight.get("type") not in ["error", "skip"]:
                                         meeting_state.add_insight(insight)

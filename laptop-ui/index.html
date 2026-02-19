@@ -281,9 +281,17 @@
 
         async function startRecording() {
             try {
-                audioWs = new WebSocket(getWsUrl() + '/ws/audio');
+                const wsUrl = getWsUrl() + '/ws/audio';
+                console.log('Connecting to:', wsUrl);
+                audioWs = new WebSocket(wsUrl);
+
+                audioWs.onerror = (err) => {
+                    console.error('Audio WebSocket error:', err);
+                    statusText.textContent = 'Connection error';
+                };
 
                 audioWs.onopen = async () => {
+                    console.log('Audio WebSocket connected');
                     statusText.textContent = 'Recording...';
 
                     const stream = await navigator.mediaDevices.getUserMedia({
