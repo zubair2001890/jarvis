@@ -3,290 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS - Insights</title>
+    <title>JARVIS - Growth Equity Copilot</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
             background: #0f0f0f;
             color: #e4e4e7;
             min-height: 100vh;
-            padding: 24px;
+            padding: 20px;
         }
-
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             padding-bottom: 16px;
             border-bottom: 1px solid #27272a;
         }
-
         .header h1 {
             font-size: 1.5rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .header h1 span {
             background: linear-gradient(90deg, #06b6d4, #8b5cf6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
-        .status-badge {
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .record-btn {
             display: flex;
             align-items: center;
             gap: 8px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            border: none;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .record-btn:hover { transform: scale(1.02); }
+        .record-btn.recording {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             padding: 6px 12px;
             border-radius: 20px;
             font-size: 0.8rem;
-            font-weight: 500;
         }
-
-        .status-badge.live {
-            background: rgba(34, 197, 94, 0.15);
-            color: #4ade80;
-        }
-
-        .status-badge.offline {
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-        }
-
+        .status-badge.connected { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+        .status-badge.disconnected { background: rgba(239, 68, 68, 0.15); color: #f87171; }
         .status-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             background: currentColor;
-            animation: pulse 2s infinite;
         }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
         .main-grid {
             display: grid;
             grid-template-columns: 1fr 350px;
-            gap: 24px;
-            height: calc(100vh - 120px);
+            gap: 20px;
+            height: calc(100vh - 100px);
         }
-
         .insights-panel {
             background: #18181b;
             border-radius: 16px;
             padding: 20px;
             overflow-y: auto;
         }
-
         .insights-panel h2 {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: #a1a1aa;
+            font-size: 0.85rem;
+            color: #71717a;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 16px;
         }
-
         .insight-card {
             background: #27272a;
             border-radius: 12px;
             padding: 16px;
             margin-bottom: 12px;
-            border-left: 3px solid #3b82f6;
-            animation: slideIn 0.3s ease;
+            border-left: 3px solid #06b6d4;
         }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        .insight-card.high {
-            border-left-color: #ef4444;
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .insight-card.medium {
-            border-left-color: #f59e0b;
-        }
-
-        .insight-card.low {
-            border-left-color: #6b7280;
-        }
-
-        .insight-card.question {
-            border-left-color: #8b5cf6;
-        }
-
-        .insight-card.flag {
-            border-left-color: #ef4444;
-        }
-
-        .insight-card.context {
-            border-left-color: #06b6d4;
-        }
-
+        .insight-card.fact { border-left-color: #06b6d4; }
+        .insight-card.high { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
         .insight-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
             margin-bottom: 8px;
         }
-
         .insight-type {
             font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
             padding: 3px 8px;
             border-radius: 4px;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(6, 182, 212, 0.2);
+            color: #22d3ee;
         }
-
-        .insight-type.question { color: #a78bfa; }
-        .insight-type.flag { color: #f87171; }
-        .insight-type.context { color: #22d3ee; }
-        .insight-type.insight { color: #4ade80; }
-
-        .insight-time {
-            font-size: 0.75rem;
-            color: #71717a;
-        }
-
-        .insight-content {
-            font-size: 1rem;
-            line-height: 1.5;
-            margin-bottom: 8px;
-        }
-
-        .insight-reasoning {
-            font-size: 0.85rem;
-            color: #a1a1aa;
-            margin-bottom: 8px;
-            font-style: italic;
-        }
-
-        .insight-data {
+        .insight-time { font-size: 0.75rem; color: #71717a; }
+        .insight-content { font-size: 1rem; line-height: 1.5; margin-bottom: 8px; }
+        .insight-source {
             font-size: 0.8rem;
-            color: #06b6d4;
-            background: rgba(6, 182, 212, 0.1);
+            color: #a1a1aa;
+            background: rgba(255,255,255,0.05);
             padding: 8px 12px;
             border-radius: 6px;
-            font-family: 'SF Mono', Monaco, monospace;
+            font-style: italic;
         }
-
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
+        .sidebar { display: flex; flex-direction: column; gap: 16px; }
         .sidebar-card {
             background: #18181b;
             border-radius: 16px;
             padding: 20px;
         }
-
         .sidebar-card h3 {
             font-size: 0.8rem;
-            font-weight: 600;
-            color: #a1a1aa;
+            color: #71717a;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 12px;
         }
-
         .transcript-box {
             font-size: 0.9rem;
             color: #d4d4d8;
             line-height: 1.6;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
         }
-
         .transcript-box:empty::before {
-            content: "Waiting for audio...";
+            content: "Click Record to start...";
             color: #52525b;
         }
-
-        .questions-list {
-            list-style: none;
-        }
-
-        .questions-list li {
-            padding: 10px 0;
-            border-bottom: 1px solid #27272a;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-
-        .questions-list li:hover {
-            color: #8b5cf6;
-        }
-
-        .questions-list li:last-child {
-            border-bottom: none;
-        }
-
-        .questions-list li::before {
-            content: "→ ";
-            color: #8b5cf6;
-        }
-
-        .connection-form {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
-        .connection-form input {
-            flex: 1;
-            padding: 10px 14px;
-            border-radius: 8px;
-            border: 1px solid #3f3f46;
-            background: #27272a;
-            color: white;
-            font-size: 0.9rem;
-        }
-
-        .connection-form input:focus {
-            outline: none;
-            border-color: #8b5cf6;
-        }
-
-        .connection-form button {
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: none;
-            background: linear-gradient(135deg, #8b5cf6, #6366f1);
-            color: white;
-            font-weight: 500;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .connection-form button:hover {
-            transform: scale(1.02);
-        }
-
         .clear-btn {
             width: 100%;
             padding: 10px;
@@ -294,251 +154,212 @@
             border: 1px solid #3f3f46;
             background: transparent;
             color: #a1a1aa;
-            font-size: 0.85rem;
             cursor: pointer;
-            transition: all 0.2s;
         }
-
-        .clear-btn:hover {
-            border-color: #ef4444;
-            color: #ef4444;
-        }
-
+        .clear-btn:hover { border-color: #ef4444; color: #ef4444; }
         .empty-state {
             text-align: center;
             padding: 60px 20px;
             color: #52525b;
         }
-
-        .empty-state .icon {
-            font-size: 3rem;
-            margin-bottom: 16px;
-        }
+        .empty-state .icon { font-size: 3rem; margin-bottom: 16px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🤖 <span>JARVIS</span></h1>
-        <div class="status-badge offline" id="statusBadge">
-            <div class="status-dot"></div>
-            <span id="statusText">Disconnected</span>
+        <h1>JARVIS</h1>
+        <div class="header-controls">
+            <button class="record-btn" id="recordBtn">
+                <span id="recordIcon">&#9679;</span>
+                <span id="recordText">Record</span>
+            </button>
+            <div class="status-badge disconnected" id="statusBadge">
+                <div class="status-dot"></div>
+                <span id="statusText">Disconnected</span>
+            </div>
         </div>
-    </div>
-
-    <div class="connection-form">
-        <input type="text" id="serverUrl" placeholder="Server URL (auto-detected)">
-        <button id="connectBtn">Connect</button>
     </div>
 
     <div class="main-grid">
         <div class="insights-panel">
-            <h2>Live Insights</h2>
+            <h2>Live Facts</h2>
             <div id="insightsContainer">
                 <div class="empty-state">
-                    <div class="icon">🎯</div>
-                    <p>Insights will appear here during your meeting</p>
+                    <div class="icon">&#128218;</div>
+                    <p>Facts with sources will appear here</p>
                 </div>
             </div>
         </div>
 
         <div class="sidebar">
-            <div class="sidebar-card">
-                <h3>📝 Live Transcript</h3>
+            <div class="sidebar-card" style="flex: 1;">
+                <h3>Live Transcript</h3>
                 <div class="transcript-box" id="transcript"></div>
             </div>
-
-            <div class="sidebar-card">
-                <h3>❓ Suggested Questions</h3>
-                <ul class="questions-list" id="questionsList">
-                    <li>Connect to start receiving suggestions...</li>
-                </ul>
-            </div>
-
             <button class="clear-btn" id="clearBtn">Clear Session</button>
         </div>
     </div>
 
     <script>
-        const serverUrlInput = document.getElementById('serverUrl');
-        const connectBtn = document.getElementById('connectBtn');
+        const recordBtn = document.getElementById('recordBtn');
+        const recordText = document.getElementById('recordText');
         const statusBadge = document.getElementById('statusBadge');
         const statusText = document.getElementById('statusText');
-        const insightsContainer = document.getElementById('insightsContainer');
         const transcript = document.getElementById('transcript');
-        const questionsList = document.getElementById('questionsList');
+        const insightsContainer = document.getElementById('insightsContainer');
         const clearBtn = document.getElementById('clearBtn');
 
-        let websocket = null;
+        let audioWs = null;
+        let uiWs = null;
+        let audioContext = null;
+        let processor = null;
+        let source = null;
+        let isRecording = false;
         let insights = [];
-        let questions = [];
 
-        function formatTime(isoString) {
-            const date = new Date(isoString);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        function getWsUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host || 'localhost:8000';
+            return protocol + '//' + host;
+        }
+
+        function formatTime(ts) {
+            return new Date(ts || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         }
 
         function renderInsight(insight) {
             const card = document.createElement('div');
-            card.className = `insight-card ${insight.priority || ''} ${insight.type || ''}`;
-
-            let html = `
+            card.className = 'insight-card ' + (insight.type || 'fact') + ' ' + (insight.priority || '');
+            card.innerHTML = `
                 <div class="insight-header">
-                    <span class="insight-type ${insight.type}">${insight.type || 'insight'}</span>
-                    <span class="insight-time">${formatTime(insight.timestamp || new Date().toISOString())}</span>
+                    <span class="insight-type">${insight.type || 'fact'}</span>
+                    <span class="insight-time">${formatTime(insight.timestamp)}</span>
                 </div>
-                <div class="insight-content">${insight.content}</div>
+                <div class="insight-content">${insight.content || ''}</div>
+                ${insight.source ? `<div class="insight-source">Source: ${insight.source}</div>` : ''}
+                ${insight.data_point ? `<div class="insight-source">${insight.data_point}</div>` : ''}
             `;
-
-            if (insight.reasoning) {
-                html += `<div class="insight-reasoning">${insight.reasoning}</div>`;
-            }
-
-            if (insight.data_point) {
-                html += `<div class="insight-data">📊 ${insight.data_point}</div>`;
-            }
-
-            card.innerHTML = html;
             return card;
         }
 
         function updateInsights() {
             if (insights.length === 0) {
-                insightsContainer.innerHTML = `
-                    <div class="empty-state">
-                        <div class="icon">🎯</div>
-                        <p>Insights will appear here during your meeting</p>
-                    </div>
-                `;
+                insightsContainer.innerHTML = '<div class="empty-state"><div class="icon">&#128218;</div><p>Facts with sources will appear here</p></div>';
                 return;
             }
-
             insightsContainer.innerHTML = '';
-            insights.slice().reverse().forEach(insight => {
-                insightsContainer.appendChild(renderInsight(insight));
-            });
+            insights.slice().reverse().forEach(i => insightsContainer.appendChild(renderInsight(i)));
         }
 
-        function updateQuestions() {
-            if (questions.length === 0) {
-                questionsList.innerHTML = '<li>Listening for context...</li>';
-                return;
-            }
-
-            questionsList.innerHTML = '';
-            questions.slice(-5).forEach(q => {
-                const li = document.createElement('li');
-                li.textContent = q;
-                questionsList.appendChild(li);
-            });
-        }
-
-        function connect() {
-            const url = serverUrlInput.value.trim();
-            if (!url) return;
-
-            if (websocket) {
-                websocket.close();
-            }
-
-            websocket = new WebSocket(`${url}/ws/ui`);
-
-            websocket.onopen = () => {
-                statusBadge.className = 'status-badge live';
+        function connectUI() {
+            uiWs = new WebSocket(getWsUrl() + '/ws/ui');
+            uiWs.onopen = () => {
+                statusBadge.className = 'status-badge connected';
                 statusText.textContent = 'Connected';
-                connectBtn.textContent = 'Disconnect';
             };
-
-            websocket.onclose = () => {
-                statusBadge.className = 'status-badge offline';
+            uiWs.onclose = () => {
+                statusBadge.className = 'status-badge disconnected';
                 statusText.textContent = 'Disconnected';
-                connectBtn.textContent = 'Connect';
-                websocket = null;
+                setTimeout(connectUI, 2000);
             };
-
-            websocket.onerror = (err) => {
-                console.error('WebSocket error:', err);
-            };
-
-            websocket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-
+            uiWs.onmessage = (e) => {
+                const data = JSON.parse(e.data);
                 if (data.type === 'state') {
                     insights = data.insights || [];
                     updateInsights();
-                    if (data.is_recording) {
-                        statusText.textContent = 'Live - Recording';
-                    }
                 }
-
                 if (data.type === 'transcript') {
                     transcript.textContent = data.text;
                 }
-
-                if (data.type === 'insight' || data.type === 'question' || data.type === 'flag' || data.type === 'context') {
+                if (data.type === 'fact' || data.type === 'context' || data.type === 'insight') {
                     insights.push(data);
                     updateInsights();
-
-                    // Extract questions
-                    if (data.type === 'question' || data.content.includes('Ask:')) {
-                        questions.push(data.content.replace('Ask:', '').trim());
-                        updateQuestions();
-                    }
-
-                    // Play notification sound (optional)
-                    if (data.priority === 'high') {
-                        // Could add a subtle notification here
-                    }
                 }
             };
         }
 
-        connectBtn.addEventListener('click', () => {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.close();
+        async function startRecording() {
+            try {
+                audioWs = new WebSocket(getWsUrl() + '/ws/audio');
+
+                audioWs.onopen = async () => {
+                    statusText.textContent = 'Recording...';
+
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true }
+                    });
+
+                    audioContext = new AudioContext({ sampleRate: 16000 });
+                    source = audioContext.createMediaStreamSource(stream);
+                    processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                    processor.onaudioprocess = (e) => {
+                        if (!isRecording || audioWs.readyState !== WebSocket.OPEN) return;
+                        const float32 = e.inputBuffer.getChannelData(0);
+                        const int16 = new Int16Array(float32.length);
+                        for (let i = 0; i < float32.length; i++) {
+                            const s = Math.max(-1, Math.min(1, float32[i]));
+                            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                        }
+                        audioWs.send(int16.buffer);
+                    };
+
+                    source.connect(processor);
+                    processor.connect(audioContext.destination);
+
+                    isRecording = true;
+                    recordBtn.classList.add('recording');
+                    recordText.textContent = 'Stop';
+                };
+
+                audioWs.onmessage = (e) => {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'transcript') {
+                        transcript.textContent = data.text;
+                    }
+                };
+
+                audioWs.onclose = () => {
+                    if (isRecording) stopRecording();
+                };
+
+            } catch (err) {
+                console.error('Recording error:', err);
+                alert('Microphone access denied');
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            recordBtn.classList.remove('recording');
+            recordText.textContent = 'Record';
+            statusText.textContent = 'Connected';
+
+            if (processor) { processor.disconnect(); processor = null; }
+            if (source) { source.disconnect(); source = null; }
+            if (audioContext) { audioContext.close(); audioContext = null; }
+            if (audioWs) { audioWs.close(); audioWs = null; }
+        }
+
+        recordBtn.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
             } else {
-                connect();
+                startRecording();
             }
         });
 
         clearBtn.addEventListener('click', () => {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify({ command: 'clear' }));
-            }
             insights = [];
-            questions = [];
             transcript.textContent = '';
             updateInsights();
-            updateQuestions();
+            if (uiWs && uiWs.readyState === WebSocket.OPEN) {
+                uiWs.send(JSON.stringify({ command: 'clear' }));
+            }
         });
 
-        // Auto-detect server URL or load saved
-        function getDefaultWsUrl() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host || 'localhost:8000';
-            return `${protocol}//${host}`;
-        }
-
-        // Get token from URL or localStorage
-        function getToken() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get('token') || localStorage.getItem('jarvis-token') || '';
-        }
-
-        // Store token if present in URL
-        const urlToken = new URLSearchParams(window.location.search).get('token');
-        if (urlToken) {
-            localStorage.setItem('jarvis-token', urlToken);
-        }
-
-        const savedUrl = localStorage.getItem('jarvis-server');
-        serverUrlInput.value = savedUrl || getDefaultWsUrl();
-
-        serverUrlInput.addEventListener('change', () => {
-            localStorage.setItem('jarvis-server', serverUrlInput.value);
-        });
-
-        // Auto-connect on load
-        connect();
+        // Auto-connect
+        connectUI();
     </script>
 </body>
 </html>
