@@ -7,6 +7,7 @@ Real-time AI assistant for investor meetings.
 import asyncio
 import json
 import os
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,10 @@ import anthropic
 import httpx
 import websockets as ws_client
 from dotenv import load_dotenv
+
+# Session storage directory
+SESSIONS_DIR = Path(__file__).parent / "sessions"
+SESSIONS_DIR.mkdir(exist_ok=True)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -82,6 +87,16 @@ class MeetingState:
         self.ui_connections: list[WebSocket] = []
         self.is_recording = False
         self.current_context = ""
+        self.session_id = None
+        self.session_start = None
+
+    def start_session(self):
+        """Start a new recording session."""
+        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
+        self.session_start = datetime.now().isoformat()
+        self.transcript = []
+        self.insights = []
+        print(f"Session started: {self.session_id}", flush=True)
 
     def add_transcript(self, text: str, is_final: bool = False):
         self.transcript.append({
@@ -101,6 +116,27 @@ class MeetingState:
             **insight,
             "timestamp": datetime.now().isoformat()
         })
+
+    def save_session(self):
+        """Save session to disk."""
+        if not self.session_id:
+            return
+
+        session_data = {
+            "session_id": self.session_id,
+            "start_time": self.session_start,
+            "end_time": datetime.now().isoformat(),
+            "transcript": self.transcript,
+            "full_transcript": self.get_full_transcript(),
+            "insights": self.insights
+        }
+
+        session_file = SESSIONS_DIR / f"{self.session_id}.json"
+        with open(session_file, "w") as f:
+            json.dump(session_data, f, indent=2)
+
+        print(f"Session saved: {session_file}", flush=True)
+        return session_file
 
 meeting_state = MeetingState()
 
@@ -305,6 +341,7 @@ async def audio_websocket(websocket: WebSocket):
     """Receive audio from phone, stream to Deepgram, analyze with Claude."""
     await websocket.accept()
     meeting_state.is_recording = True
+    meeting_state.start_session()
 
     if not DEEPGRAM_API_KEY:
         await websocket.send_json({"error": "No Deepgram API key configured"})
@@ -409,6 +446,7 @@ async def audio_websocket(websocket: WebSocket):
         traceback.print_exc()
     finally:
         meeting_state.is_recording = False
+        meeting_state.save_session()
         try:
             await deepgram_ws.close()
         except:
@@ -594,6 +632,34 @@ async def clear_session():
     meeting_state.insights = []
     meeting_state.transcript = []
     return {"status": "cleared"}
+
+@app.get("/sessions")
+async def list_sessions():
+    """List all saved sessions."""
+    sessions = []
+    for f in sorted(SESSIONS_DIR.glob("*.json"), reverse=True):
+        try:
+            with open(f) as file:
+                data = json.load(file)
+                sessions.append({
+                    "session_id": data.get("session_id"),
+                    "start_time": data.get("start_time"),
+                    "end_time": data.get("end_time"),
+                    "transcript_length": len(data.get("full_transcript", "")),
+                    "insight_count": len(data.get("insights", []))
+                })
+        except:
+            pass
+    return {"sessions": sessions}
+
+@app.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Get a specific session."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+    with open(session_file) as f:
+        return json.load(f)
 
 # =============================================================================
 # Run
