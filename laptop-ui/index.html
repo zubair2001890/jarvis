@@ -305,6 +305,10 @@
         let insights = [];
 
         function getWsUrl() {
+            // If on GitHub Pages, connect to EC2 backend
+            if (window.location.host.includes('github.io')) {
+                return 'wss://54.146.23.219';
+            }
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.host || 'localhost:8000';
             return protocol + '//' + host;
