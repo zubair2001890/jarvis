@@ -577,22 +577,28 @@ async def audio_websocket(websocket: WebSocket):
                                 print(f"Transcript length: {len(full_transcript)}, seconds since last: {(now - last_analysis_time).seconds}", flush=True)
                                 if (now - last_analysis_time).seconds >= 10 and len(full_transcript) > 50:
                                     last_analysis_time = now
-                                    print("Calling Claude for analysis...", flush=True)
+                                    print("Calling Claude for analysis (background)...", flush=True)
 
-                                    # Run Claude analysis
-                                    insight = await analyze_with_claude(full_transcript[-2000:])
-                                    print(f"Claude response: {insight}", flush=True)
+                                    # Run Claude analysis in BACKGROUND - don't block Deepgram
+                                    async def run_analysis(transcript_snapshot):
+                                        try:
+                                            insight = await analyze_with_claude(transcript_snapshot)
+                                            print(f"Claude response: {insight}", flush=True)
 
-                                    if insight.get("type") not in ["error", "skip"]:
-                                        meeting_state.add_insight(insight)
-                                        print(f"Sending insight to {len(meeting_state.ui_connections)} UI connections", flush=True)
+                                            if insight.get("type") not in ["error", "skip"]:
+                                                meeting_state.add_insight(insight)
+                                                print(f"Sending insight to {len(meeting_state.ui_connections)} UI connections", flush=True)
 
-                                        for ui_ws in meeting_state.ui_connections:
-                                            try:
-                                                await ui_ws.send_json(insight)
-                                                print("Insight sent successfully!", flush=True)
-                                            except Exception as send_err:
-                                                print(f"Failed to send insight: {send_err}", flush=True)
+                                                for ui_ws in meeting_state.ui_connections:
+                                                    try:
+                                                        await ui_ws.send_json(insight)
+                                                        print("Insight sent successfully!", flush=True)
+                                                    except Exception as send_err:
+                                                        print(f"Failed to send insight: {send_err}", flush=True)
+                                        except Exception as e:
+                                            print(f"Background analysis error: {e}", flush=True)
+
+                                    asyncio.create_task(run_analysis(full_transcript[-2000:]))
             except Exception as e:
                 print(f"Deepgram receive error: {e}")
 
