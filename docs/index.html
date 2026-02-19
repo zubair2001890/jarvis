@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS - Growth Equity Copilot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f0f0f;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            max-width: 500px;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #71717a; margin-bottom: 3rem; }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s;
+        }
+        .btn:hover { transform: scale(1.02); }
+        .btn-laptop {
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: white;
+        }
+        .btn-phone {
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            color: white;
+        }
+        .server-config {
+            margin-top: 2rem;
+            padding: 20px;
+            background: #18181b;
+            border-radius: 12px;
+        }
+        .server-config label {
+            display: block;
+            color: #a1a1aa;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        .server-config input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #3f3f46;
+            background: #27272a;
+            color: white;
+            font-size: 1rem;
+        }
+        .server-config button {
+            margin-top: 12px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: #22c55e;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JARVIS</h1>
+        <p class="subtitle">Growth Equity Copilot</p>
+
+        <a href="laptop.html" class="btn btn-laptop">💻 Open Laptop UI</a>
+        <a href="phone.html" class="btn btn-phone">📱 Open Phone Mic</a>
+
+        <div class="server-config">
+            <label>Backend Server URL</label>
+            <input type="text" id="serverUrl" placeholder="ws://your-server:8000" value="">
+            <button onclick="saveServer()">Save</button>
+        </div>
+    </div>
+
+    <script>
+        // Load saved server
+        const saved = localStorage.getItem('jarvis-server');
+        if (saved) {
+            document.getElementById('serverUrl').value = saved;
+        }
+
+        function saveServer() {
+            const url = document.getElementById('serverUrl').value;
+            localStorage.setItem('jarvis-server', url);
+            alert('Server saved!');
+        }
+    </script>
+</body>
+</html>

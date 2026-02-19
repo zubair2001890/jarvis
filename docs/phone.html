@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JARVIS - Mic</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #8892b0;
+            margin-bottom: 3rem;
+            font-size: 0.9rem;
+        }
+
+        .mic-button {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 3rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+        }
+
+        .mic-button:hover {
+            transform: scale(1.05);
+        }
+
+        .mic-button.recording {
+            background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 10px 40px rgba(245, 87, 108, 0.4); }
+            50% { box-shadow: 0 10px 60px rgba(245, 87, 108, 0.6); }
+        }
+
+        .status {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            min-height: 30px;
+        }
+
+        .status.connected {
+            color: #4ade80;
+        }
+
+        .status.disconnected {
+            color: #f87171;
+        }
+
+        .status.recording {
+            color: #fbbf24;
+        }
+
+        .server-input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #1e293b;
+            color: white;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .server-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .transcript-preview {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 2rem;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        .transcript-preview:empty::before {
+            content: "Transcript will appear here...";
+            color: #475569;
+        }
+
+        .visualizer {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 4px;
+            height: 40px;
+            margin-bottom: 2rem;
+        }
+
+        .visualizer-bar {
+            width: 6px;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            border-radius: 3px;
+            transition: height 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JARVIS</h1>
+        <p class="subtitle">Growth Equity Copilot</p>
+
+        <input
+            type="text"
+            id="serverUrl"
+            class="server-input"
+            placeholder="Server URL (auto-detected)"
+        >
+
+        <div class="visualizer" id="visualizer">
+            <div class="visualizer-bar" style="height: 10px;"></div>
+            <div class="visualizer-bar" style="height: 15px;"></div>
+            <div class="visualizer-bar" style="height: 20px;"></div>
+            <div class="visualizer-bar" style="height: 15px;"></div>
+            <div class="visualizer-bar" style="height: 10px;"></div>
+        </div>
+
+        <button class="mic-button" id="micButton">
+            🎤
+        </button>
+
+        <p class="status" id="status">Tap to start</p>
+
+        <div class="transcript-preview" id="transcript"></div>
+    </div>
+
+    <script>
+        const micButton = document.getElementById('micButton');
+        const status = document.getElementById('status');
+        const serverUrlInput = document.getElementById('serverUrl');
+        const transcriptDiv = document.getElementById('transcript');
+        const visualizerBars = document.querySelectorAll('.visualizer-bar');
+
+        let mediaRecorder = null;
+        let audioContext = null;
+        let analyser = null;
+        let websocket = null;
+        let isRecording = false;
+
+        // Visualizer animation
+        function updateVisualizer(dataArray) {
+            if (!dataArray) {
+                visualizerBars.forEach(bar => bar.style.height = '10px');
+                return;
+            }
+
+            const step = Math.floor(dataArray.length / visualizerBars.length);
+            visualizerBars.forEach((bar, i) => {
+                const value = dataArray[i * step];
+                const height = Math.max(10, (value / 255) * 60);
+                bar.style.height = `${height}px`;
+            });
+        }
+
+        async function startRecording() {
+            const serverUrl = serverUrlInput.value.trim();
+            if (!serverUrl) {
+                status.textContent = 'Enter server URL';
+                status.className = 'status disconnected';
+                return;
+            }
+
+            try {
+                // Connect WebSocket
+                websocket = new WebSocket(`${serverUrl}/ws/audio`);
+
+                websocket.onopen = () => {
+                    status.textContent = 'Connected - Recording...';
+                    status.className = 'status recording';
+                };
+
+                websocket.onclose = () => {
+                    if (isRecording) {
+                        stopRecording();
+                    }
+                    status.textContent = 'Disconnected';
+                    status.className = 'status disconnected';
+                };
+
+                websocket.onerror = (err) => {
+                    console.error('WebSocket error:', err);
+                    status.textContent = 'Connection failed';
+                    status.className = 'status disconnected';
+                };
+
+                websocket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'transcript') {
+                        transcriptDiv.textContent = data.text;
+                    }
+                };
+
+                // Get microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 16000,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+
+                // Audio context for visualization
+                audioContext = new AudioContext();
+                const source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                source.connect(analyser);
+
+                // Visualize audio
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                function animate() {
+                    if (isRecording) {
+                        analyser.getByteFrequencyData(dataArray);
+                        updateVisualizer(dataArray);
+                        requestAnimationFrame(animate);
+                    }
+                }
+                animate();
+
+                // Create MediaRecorder
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && websocket.readyState === WebSocket.OPEN) {
+                        websocket.send(event.data);
+                    }
+                };
+
+                mediaRecorder.start(250); // Send data every 250ms
+                isRecording = true;
+                micButton.classList.add('recording');
+
+            } catch (err) {
+                console.error('Error starting recording:', err);
+                status.textContent = 'Microphone access denied';
+                status.className = 'status disconnected';
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            micButton.classList.remove('recording');
+            updateVisualizer(null);
+
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+
+            status.textContent = 'Tap to start';
+            status.className = 'status';
+        }
+
+        micButton.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        // Check connection on load
+        serverUrlInput.addEventListener('change', () => {
+            localStorage.setItem('jarvis-server', serverUrlInput.value);
+        });
+
+        // Auto-detect server URL or load saved
+        function getDefaultWsUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host || 'localhost:8000';
+            return `${protocol}//${host}`;
+        }
+
+        // Get token from URL or localStorage
+        function getToken() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token') || localStorage.getItem('jarvis-token') || '';
+        }
+
+        const savedUrl = localStorage.getItem('jarvis-server');
+        serverUrlInput.value = savedUrl || getDefaultWsUrl();
+
+        // Store token if present in URL
+        const urlToken = new URLSearchParams(window.location.search).get('token');
+        if (urlToken) {
+            localStorage.setItem('jarvis-token', urlToken);
+        }
+    </script>
+</body>
+</html>
