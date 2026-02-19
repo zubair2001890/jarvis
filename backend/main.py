@@ -15,11 +15,13 @@ import anthropic
 import httpx
 from deepgram import DeepgramClient, LiveTranscriptionEvents, LiveOptions
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
+import hashlib
+import secrets
 
 load_dotenv()
 
@@ -31,6 +33,7 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OBSIDIAN_VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "")
 GRANOLA_CACHE_PATH = os.path.expanduser("~/Library/Application Support/Granola/cache-v3.json")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")  # Set this to require password
 
 # =============================================================================
 # App Setup
@@ -45,6 +48,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Simple token store (in production, use Redis or similar)
+valid_tokens = set()
+
+def generate_token() -> str:
+    """Generate a secure token."""
+    return secrets.token_urlsafe(32)
+
+def verify_token(token: str) -> bool:
+    """Verify if token is valid."""
+    if not APP_PASSWORD:  # No password set = no auth required
+        return True
+    return token in valid_tokens
+
+def check_auth(token: str = Query(None)) -> bool:
+    """Dependency to check authentication."""
+    if not APP_PASSWORD:
+        return True
+    if not token or not verify_token(token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return True
 
 # =============================================================================
 # State Management
@@ -438,19 +462,131 @@ async def ui_websocket(websocket: WebSocket):
 # REST Endpoints
 # =============================================================================
 
+LOGIN_PAGE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JARVIS - Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f0f0f;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: #18181b;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 90%;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #71717a; margin-bottom: 2rem; }
+        input {
+            width: 100%;
+            padding: 14px;
+            border-radius: 8px;
+            border: 1px solid #3f3f46;
+            background: #27272a;
+            color: white;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .error { color: #f87171; margin-top: 1rem; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JARVIS</h1>
+        <p class="subtitle">Growth Equity Copilot</p>
+        <input type="password" id="password" placeholder="Enter password" onkeypress="if(event.key==='Enter')login()">
+        <button onclick="login()">Enter</button>
+        <p class="error" id="error">Invalid password</p>
+    </div>
+    <script>
+        // Check if already authenticated
+        const token = localStorage.getItem('jarvis-token');
+        if (token) {
+            window.location.href = '/laptop?token=' + token;
+        }
+
+        async function login() {
+            const password = document.getElementById('password').value;
+            const resp = await fetch('/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password})
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                localStorage.setItem('jarvis-token', data.token);
+                window.location.href = '/laptop?token=' + data.token;
+            } else {
+                document.getElementById('error').style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
+"""
+
 @app.get("/")
-async def root():
-    """Redirect to laptop UI."""
-    return HTMLResponse(content=open(Path(__file__).parent.parent / "laptop-ui" / "index.html").read())
+async def root(token: str = Query(None)):
+    """Root - show login or redirect to app."""
+    if not APP_PASSWORD:
+        # No password set, go straight to app
+        return HTMLResponse(content=open(Path(__file__).parent.parent / "laptop-ui" / "index.html").read())
+    if token and verify_token(token):
+        return HTMLResponse(content=open(Path(__file__).parent.parent / "laptop-ui" / "index.html").read())
+    return HTMLResponse(content=LOGIN_PAGE)
+
+@app.post("/auth/login")
+async def login(request: Request):
+    """Login endpoint."""
+    data = await request.json()
+    password = data.get("password", "")
+    if password == APP_PASSWORD:
+        token = generate_token()
+        valid_tokens.add(token)
+        return {"token": token}
+    raise HTTPException(status_code=401, detail="Invalid password")
 
 @app.get("/phone")
-async def phone_ui():
+async def phone_ui(token: str = Query(None)):
     """Serve phone mic capture UI."""
+    if APP_PASSWORD and not verify_token(token):
+        return HTMLResponse(content=LOGIN_PAGE)
     return HTMLResponse(content=open(Path(__file__).parent.parent / "phone-app" / "index.html").read())
 
 @app.get("/laptop")
-async def laptop_ui():
+async def laptop_ui(token: str = Query(None)):
     """Serve laptop insights UI."""
+    if APP_PASSWORD and not verify_token(token):
+        return HTMLResponse(content=LOGIN_PAGE)
     return HTMLResponse(content=open(Path(__file__).parent.parent / "laptop-ui" / "index.html").read())
 
 @app.get("/api/status")

@@ -331,8 +331,20 @@
             return `${protocol}//${host}`;
         }
 
+        // Get token from URL or localStorage
+        function getToken() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token') || localStorage.getItem('jarvis-token') || '';
+        }
+
         const savedUrl = localStorage.getItem('jarvis-server');
         serverUrlInput.value = savedUrl || getDefaultWsUrl();
+
+        // Store token if present in URL
+        const urlToken = new URLSearchParams(window.location.search).get('token');
+        if (urlToken) {
+            localStorage.setItem('jarvis-token', urlToken);
+        }
     </script>
 </body>
 </html>
