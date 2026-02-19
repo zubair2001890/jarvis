@@ -241,37 +241,39 @@ JARVIS_SYSTEM_PROMPT = """You are JARVIS - elite investor co-pilot for a growth 
 
 ## WHEN TO RESPOND
 Only respond when there's something valuable to add:
-- A company, person, or fund is mentioned → give context
-- A metric/benchmark is discussed → provide market context
-- A direct question is asked → answer it
-- A claim is made that needs verification → provide data
+- A public company mentioned → USE get_stock_data tool for real numbers
+- Need recent news/facts → USE web_search tool
+- A metric/benchmark discussed → provide market context
+- A direct question asked → answer with real data
 
-If it's just small talk, filler, or nothing actionable → return {"type": "skip"}
+If it's just small talk or nothing actionable → return {"type": "skip"}
+
+## YOUR TOOLS
+- get_stock_data(ticker) → real-time market cap, EV, revenue, multiples
+- web_search(query) → recent news and facts
+
+USE THESE TOOLS to get real data. Don't make up numbers.
 
 ## STYLE: McKinsey top-down
 - **Bold headline** (the answer in 1 line)
-- **2-3 bullets** (supporting facts, numbers, benchmarks)
-- **Source**
+- **2-3 bullets** (supporting facts with REAL numbers)
+- **Source** (hyperlink)
 
 ## Output Format
 {"type": "insight", "content": "Your structured insight here", "source": "link"}
-{"type": "skip"} ← use this when nothing valuable to add
+{"type": "skip"} ← use when nothing valuable to add
 
 ## Examples
 
-"Stripe"
-{"type": "insight", "content": "**Stripe: $50B valuation, dominant in online payments**\n• Down from $95B peak (2021) - 47% markdown\n• Takes 2.9% + $0.30/txn, powers 14% of US e-commerce\n• Comps: Adyen $40B, Square $45B", "source": "stripe.com/newsroom"}
+User mentions "Snowflake":
+1. Call get_stock_data("SNOW")
+2. Return: {"type": "insight", "content": "**Snowflake: $XX.XB market cap, XX.Xx EV/Revenue**\n• Revenue: $X.XB (YoY growth XX%)\n• NRR: 127% (top quartile SaaS)\n• Key risk: consumption model = volatile quarters", "source": "finance.yahoo.com/quote/SNOW"}
 
-"150% NRR"
-{"type": "insight", "content": "**150% NRR is elite - top 5% of SaaS**\n• Benchmarks: Snowflake 127%, Datadog 115%, MongoDB 120%\n• Rule of thumb: >130% = hit plan with zero new logos\n• Expansion levers: seats, usage, or upsells", "source": "bvp.com/atlas"}
+User mentions "latest AI news":
+1. Call web_search("AI industry news 2025")
+2. Return insight with real facts from search
 
-"so anyway we were thinking about..."
-{"type": "skip"}
-
-"let me introduce the team"
-{"type": "skip"}
-
-Be selective. Quality over quantity."""
+Be selective. Use tools for real data. No made-up numbers."""
 
 # =============================================================================
 # Live Data Functions
@@ -389,15 +391,6 @@ async def analyze_with_claude(
     if feedback_learnings:
         context_parts.append(f"## LEARN FROM PAST FEEDBACK (what user wanted):\n{feedback_learnings}\n")
 
-    # Get live data based on transcript (companies, metrics mentioned)
-    # Extract potential search queries from transcript
-    try:
-        live_data = get_live_context(transcript)
-        if live_data and "No results" not in live_data and "error" not in live_data.lower():
-            context_parts.append(f"## LIVE DATA (real-time, verified):\n{live_data}\n")
-    except Exception as e:
-        print(f"Live data fetch error: {e}", flush=True)
-
     if obsidian_context:
         context_parts.append("## Relevant Notes from Your Playbook:")
         for note in obsidian_context:
@@ -415,18 +408,88 @@ async def analyze_with_claude(
 
 {context_str}
 
-Based on what was just said, provide ONE insight using the LIVE DATA if available. Include real numbers and hyperlink sources."""
+Based on what was just said, provide ONE insight. Use tools to get real-time data if needed."""
+
+    # Define tools for Claude to use
+    tools = [
+        {
+            "name": "get_stock_data",
+            "description": "Get real-time stock data including price, market cap, EV, revenue, and valuation multiples (EV/Revenue, EV/EBITDA, EV/GP) for a public company",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Stock ticker symbol (e.g., SNOW, DDOG, AAPL)"}
+                },
+                "required": ["ticker"]
+            }
+        },
+        {
+            "name": "web_search",
+            "description": "Search the web for recent news, facts, or information about a topic",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"}
+                },
+                "required": ["query"]
+            }
+        }
+    ]
 
     try:
+        # First call - Claude may request tools
         response = client.messages.create(
             model="claude-opus-4-6",
             max_tokens=500,
             system=JARVIS_SYSTEM_PROMPT,
+            tools=tools,
             messages=[{"role": "user", "content": user_message}]
         )
 
-        # Parse JSON response
-        content = response.content[0].text
+        # Handle tool use if Claude requests it
+        while response.stop_reason == "tool_use":
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    tool_name = block.name
+                    tool_input = block.input
+
+                    if tool_name == "get_stock_data":
+                        result = get_stock_data(tool_input["ticker"])
+                    elif tool_name == "web_search":
+                        result = search_web(tool_input["query"])
+                    else:
+                        result = "Unknown tool"
+
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result
+                    })
+
+            # Continue conversation with tool results
+            response = client.messages.create(
+                model="claude-opus-4-6",
+                max_tokens=500,
+                system=JARVIS_SYSTEM_PROMPT,
+                tools=tools,
+                messages=[
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response.content},
+                    {"role": "user", "content": tool_results}
+                ]
+            )
+
+        # Parse JSON response - find text block
+        content = ""
+        for block in response.content:
+            if hasattr(block, 'text'):
+                content = block.text
+                break
+
+        if not content:
+            return {"type": "skip"}
+
         try:
             # Try to extract JSON from response
             if "{" in content:
@@ -445,6 +508,7 @@ Based on what was just said, provide ONE insight using the LIVE DATA if availabl
         }
 
     except Exception as e:
+        print(f"Claude error: {e}", flush=True)
         return {"type": "error", "content": str(e)}
 
 # =============================================================================
