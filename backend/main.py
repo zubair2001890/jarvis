@@ -446,11 +446,11 @@ Based on what was just said, provide ONE insight. Use tools to get real-time dat
             messages=[{"role": "user", "content": user_message}]
         )
 
-        # Handle tool use if Claude requests it (max 3 rounds)
+        # Handle tool use if Claude requests it (max 1 round for speed)
         tool_rounds = 0
         messages = [{"role": "user", "content": user_message}]
 
-        while response.stop_reason == "tool_use" and tool_rounds < 3:
+        while response.stop_reason == "tool_use" and tool_rounds < 1:
             tool_rounds += 1
             print(f"Tool round {tool_rounds}, processing tools...", flush=True)
 
@@ -602,12 +602,14 @@ async def audio_websocket(websocket: WebSocket):
 
                                     if insight.get("type") not in ["error", "skip"]:
                                         meeting_state.add_insight(insight)
+                                        print(f"Sending insight to {len(meeting_state.ui_connections)} UI connections", flush=True)
 
                                         for ui_ws in meeting_state.ui_connections:
                                             try:
                                                 await ui_ws.send_json(insight)
-                                            except:
-                                                pass
+                                                print("Insight sent successfully!", flush=True)
+                                            except Exception as send_err:
+                                                print(f"Failed to send insight: {send_err}", flush=True)
             except Exception as e:
                 print(f"Deepgram receive error: {e}")
 
