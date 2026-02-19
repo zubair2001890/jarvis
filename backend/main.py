@@ -237,43 +237,30 @@ async def web_search(query: str) -> list[dict]:
 # Claude Analysis
 # =============================================================================
 
-JARVIS_SYSTEM_PROMPT = """You are JARVIS - elite investor co-pilot for a growth equity investor in live meetings.
+JARVIS_SYSTEM_PROMPT = """You are JARVIS - rapid investor co-pilot. Be FAST.
 
 ## WHEN TO RESPOND
-Only respond when there's something valuable to add:
-- A public company mentioned → USE get_stock_data tool for real numbers
-- Need recent news/facts → USE web_search tool
-- A metric/benchmark discussed → provide market context
-- A direct question asked → answer with real data
+- Company/person/fund mentioned → context
+- Metric discussed → benchmark it
+- Question asked → answer
+- Small talk → {"type": "skip"}
 
-If it's just small talk or nothing actionable → return {"type": "skip"}
+## STYLE
+**Bold headline**
+• Bullet 1
+• Bullet 2
+Source: link
 
-## YOUR TOOLS
-- get_stock_data(ticker) → real-time market cap, EV, revenue, multiples
-- web_search(query) → recent news and facts
-
-USE THESE TOOLS to get real data. Don't make up numbers.
-
-## STYLE: McKinsey top-down
-- **Bold headline** (the answer in 1 line)
-- **2-3 bullets** (supporting facts with REAL numbers)
-- **Source** (hyperlink)
-
-## Output Format
-{"type": "insight", "content": "Your structured insight here", "source": "link"}
-{"type": "skip"} ← use when nothing valuable to add
+## Output: JSON only
+{"type": "insight", "content": "...", "source": "..."}
+{"type": "skip"}
 
 ## Examples
+"Datadog" → {"type": "insight", "content": "**Datadog: Leader in observability**\n• ~$40B market cap, 10-12x EV/Revenue\n• Comps: Dynatrace, Splunk, Elastic\n• 120%+ NRR, land-and-expand model", "source": "finance.yahoo.com/quote/DDOG"}
 
-User mentions "Snowflake":
-1. Call get_stock_data("SNOW")
-2. Return: {"type": "insight", "content": "**Snowflake: $XX.XB market cap, XX.Xx EV/Revenue**\n• Revenue: $X.XB (YoY growth XX%)\n• NRR: 127% (top quartile SaaS)\n• Key risk: consumption model = volatile quarters", "source": "finance.yahoo.com/quote/SNOW"}
+"Nice to meet you" → {"type": "skip"}
 
-User mentions "latest AI news":
-1. Call web_search("AI industry news 2025")
-2. Return insight with real facts from search
-
-Be selective. Use tools for real data. No made-up numbers."""
+Be fast. Be useful. Skip noise."""
 
 # =============================================================================
 # Live Data Functions
@@ -437,57 +424,14 @@ Based on what was just said, provide ONE insight. Use tools to get real-time dat
     ]
 
     try:
-        # First call - Claude may request tools
+        # Fast response - use Sonnet without tools for speed
         response = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=500,
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
             system=JARVIS_SYSTEM_PROMPT,
-            tools=tools,
             messages=[{"role": "user", "content": user_message}]
         )
-
-        # Handle tool use if Claude requests it (max 1 round for speed)
-        tool_rounds = 0
-        messages = [{"role": "user", "content": user_message}]
-
-        while response.stop_reason == "tool_use" and tool_rounds < 1:
-            tool_rounds += 1
-            print(f"Tool round {tool_rounds}, processing tools...", flush=True)
-
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    tool_name = block.name
-                    tool_input = block.input
-                    print(f"  Tool: {tool_name}({tool_input})", flush=True)
-
-                    if tool_name == "get_stock_data":
-                        result = get_stock_data(tool_input["ticker"])
-                    elif tool_name == "web_search":
-                        result = search_web(tool_input["query"])
-                    else:
-                        result = "Unknown tool"
-
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result
-                    })
-
-            # Build message history
-            messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": tool_results})
-
-            # Continue conversation with tool results
-            response = client.messages.create(
-                model="claude-opus-4-6",
-                max_tokens=500,
-                system=JARVIS_SYSTEM_PROMPT,
-                tools=tools,
-                messages=messages
-            )
-
-        print(f"Claude done. Stop reason: {response.stop_reason}", flush=True)
+        print(f"Claude done (fast mode)", flush=True)
 
         # Parse JSON response - find text block
         content = ""
@@ -538,7 +482,7 @@ async def audio_websocket(websocket: WebSocket):
 
     try:
         # Connect to Deepgram streaming API
-        deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true"
+        deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true&diarize=true"
         import sys
         print(f"Connecting to Deepgram with key: {DEEPGRAM_API_KEY[:10]}...", flush=True)
 
