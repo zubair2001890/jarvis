@@ -13,10 +13,9 @@ from typing import Optional
 
 import anthropic
 import httpx
+import websockets as ws_client
 from dotenv import load_dotenv
 
-# Local transcription
-from transcriber import LocalTranscriber, AudioConverter, get_transcriber
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -32,10 +31,10 @@ load_dotenv()
 # =============================================================================
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 OBSIDIAN_VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "")
 GRANOLA_CACHE_PATH = os.path.expanduser("~/Library/Application Support/Granola/cache-v3.json")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")  # Set this to require password
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")  # tiny, base, small, medium, large-v3
 
 # =============================================================================
 # App Setup
@@ -329,95 +328,92 @@ Based on what was just said, provide ONE insight, question, or flag. Be specific
 
 @app.websocket("/ws/audio")
 async def audio_websocket(websocket: WebSocket):
-    """Receive audio from phone, transcribe locally with Whisper, analyze with Claude."""
+    """Receive audio from phone, stream to Deepgram, analyze with Claude."""
     await websocket.accept()
     meeting_state.is_recording = True
 
+    if not DEEPGRAM_API_KEY:
+        await websocket.send_json({"error": "No Deepgram API key configured"})
+        await websocket.close()
+        return
+
     try:
-        # Initialize local transcriber
-        transcriber = get_transcriber(WHISPER_MODEL)
+        # Connect to Deepgram streaming API
+        deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true"
+
+        deepgram_ws = await ws_client.connect(
+            deepgram_url,
+            additional_headers=[("Authorization", f"Token {DEEPGRAM_API_KEY}")]
+        )
+
+        await websocket.send_json({"status": "connected", "transcription": "deepgram"})
+
+        full_transcript = ""
         last_analysis_time = datetime.now()
-        audio_buffer = bytearray()
 
-        await websocket.send_json({"status": "connected", "model": WHISPER_MODEL})
+        async def receive_from_deepgram():
+            """Receive transcripts from Deepgram and forward to UI."""
+            nonlocal full_transcript, last_analysis_time
 
-        while True:
             try:
-                # Receive audio data from phone
-                data = await websocket.receive_bytes()
+                async for message in deepgram_ws:
+                    data = json.loads(message)
 
-                # Convert WebM to PCM if needed
-                if AudioConverter.is_webm(data) or len(audio_buffer) == 0:
-                    # Accumulate WebM chunks
-                    audio_buffer.extend(data)
+                    if data.get("type") == "Results":
+                        transcript = data.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
+                        is_final = data.get("is_final", False)
 
-                    # Try to convert and transcribe when we have enough data
-                    if len(audio_buffer) > 50000:  # ~1 second of WebM audio
-                        try:
-                            pcm_data = await AudioConverter.webm_to_pcm(bytes(audio_buffer))
-                            audio_buffer = bytearray()
+                        if transcript:
+                            # Send to UI
+                            for ui_ws in meeting_state.ui_connections:
+                                try:
+                                    await ui_ws.send_json({
+                                        "type": "transcript",
+                                        "text": transcript,
+                                        "is_final": is_final
+                                    })
+                                except:
+                                    pass
 
-                            # Transcribe
-                            transcript = await transcriber.process_audio_chunk(pcm_data)
-
-                            if transcript:
+                            if is_final:
+                                full_transcript += " " + transcript
                                 meeting_state.add_transcript(transcript, is_final=True)
 
-                                # Send transcript to UI
-                                for ui_ws in meeting_state.ui_connections:
-                                    try:
-                                        await ui_ws.send_json({
-                                            "type": "transcript",
-                                            "text": transcript,
-                                            "is_final": True
-                                        })
-                                    except:
-                                        pass
-
-                                # Analyze periodically
+                                # Analyze with Claude every 10 seconds if we have content
                                 now = datetime.now()
-                                if (now - last_analysis_time).seconds >= 15:
+                                if (now - last_analysis_time).seconds >= 10 and len(full_transcript) > 200:
                                     last_analysis_time = now
 
-                                    full_transcript = meeting_state.get_full_transcript()
-                                    if full_transcript:
-                                        # Search for context
-                                        search_terms = transcript.split()[:5]
-                                        search_query = " ".join(search_terms)
-                                        obsidian_context = search_obsidian(search_query)
-                                        granola_context = search_granola(search_query)
+                                    # Run Claude analysis
+                                    insight = await analyze_with_claude(full_transcript[-2000:])
 
-                                        # Analyze with Claude
-                                        insight = await analyze_with_claude(
-                                            full_transcript[-2000:],
-                                            obsidian_context,
-                                            granola_context
-                                        )
+                                    if insight.get("type") not in ["error", "skip"]:
+                                        meeting_state.add_insight(insight)
 
-                                        if insight.get("type") != "error":
-                                            meeting_state.add_insight(insight)
+                                        for ui_ws in meeting_state.ui_connections:
+                                            try:
+                                                await ui_ws.send_json(insight)
+                                            except:
+                                                pass
+            except Exception as e:
+                print(f"Deepgram receive error: {e}")
 
-                                            for ui_ws in meeting_state.ui_connections:
-                                                try:
-                                                    await ui_ws.send_json({
-                                                        "type": "insight",
-                                                        **insight
-                                                    })
-                                                except:
-                                                    pass
-                        except Exception as e:
-                            print(f"Transcription error: {e}")
-                            audio_buffer = bytearray()
-                else:
-                    audio_buffer.extend(data)
-
+        async def forward_audio_to_deepgram():
+            """Forward audio from client to Deepgram."""
+            try:
+                while True:
+                    data = await websocket.receive_bytes()
+                    await deepgram_ws.send(data)
             except WebSocketDisconnect:
-                break
+                pass
+            except Exception as e:
+                print(f"Audio forward error: {e}")
 
-        # Transcribe any remaining audio
-        final_transcript = await transcriber.finalize()
-        if final_transcript:
-            meeting_state.add_transcript(final_transcript, is_final=True)
+        # Run both tasks concurrently
+        await asyncio.gather(
+            receive_from_deepgram(),
+            forward_audio_to_deepgram()
+        )
 
     except Exception as e:
         print(f"Error in audio websocket: {e}")
@@ -425,6 +421,10 @@ async def audio_websocket(websocket: WebSocket):
         traceback.print_exc()
     finally:
         meeting_state.is_recording = False
+        try:
+            await deepgram_ws.close()
+        except:
+            pass
 
 @app.websocket("/ws/ui")
 async def ui_websocket(websocket: WebSocket):
@@ -590,8 +590,8 @@ async def api_status():
 async def health():
     return {
         "status": "healthy",
-        "transcription": "local-whisper",
-        "whisper_model": WHISPER_MODEL,
+        "transcription": "deepgram",
+        "deepgram_configured": bool(DEEPGRAM_API_KEY),
         "anthropic_configured": bool(ANTHROPIC_API_KEY),
         "obsidian_configured": bool(OBSIDIAN_VAULT_PATH) and os.path.exists(OBSIDIAN_VAULT_PATH),
         "granola_configured": os.path.exists(GRANOLA_CACHE_PATH)
