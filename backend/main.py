@@ -446,13 +446,20 @@ Based on what was just said, provide ONE insight. Use tools to get real-time dat
             messages=[{"role": "user", "content": user_message}]
         )
 
-        # Handle tool use if Claude requests it
-        while response.stop_reason == "tool_use":
+        # Handle tool use if Claude requests it (max 3 rounds)
+        tool_rounds = 0
+        messages = [{"role": "user", "content": user_message}]
+
+        while response.stop_reason == "tool_use" and tool_rounds < 3:
+            tool_rounds += 1
+            print(f"Tool round {tool_rounds}, processing tools...", flush=True)
+
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
                     tool_name = block.name
                     tool_input = block.input
+                    print(f"  Tool: {tool_name}({tool_input})", flush=True)
 
                     if tool_name == "get_stock_data":
                         result = get_stock_data(tool_input["ticker"])
@@ -467,18 +474,20 @@ Based on what was just said, provide ONE insight. Use tools to get real-time dat
                         "content": result
                     })
 
+            # Build message history
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_results})
+
             # Continue conversation with tool results
             response = client.messages.create(
                 model="claude-opus-4-6",
                 max_tokens=500,
                 system=JARVIS_SYSTEM_PROMPT,
                 tools=tools,
-                messages=[
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response.content},
-                    {"role": "user", "content": tool_results}
-                ]
+                messages=messages
             )
+
+        print(f"Claude done. Stop reason: {response.stop_reason}", flush=True)
 
         # Parse JSON response - find text block
         content = ""
