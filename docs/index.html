@@ -400,6 +400,10 @@
                 audioWs.onerror = (err) => {
                     console.error('Audio WebSocket error:', err);
                     statusText.textContent = 'Connection error';
+                    // If on GitHub Pages, likely SSL cert issue
+                    if (window.location.host.includes('github.io')) {
+                        alert('Connection failed. Please visit https://54.146.23.219 first, accept the security warning, then return here.');
+                    }
                 };
 
                 audioWs.onopen = async () => {
