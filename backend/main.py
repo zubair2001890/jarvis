@@ -440,6 +440,21 @@ async def ui_websocket(websocket: WebSocket):
 
 @app.get("/")
 async def root():
+    """Redirect to laptop UI."""
+    return HTMLResponse(content=open(Path(__file__).parent.parent / "laptop-ui" / "index.html").read())
+
+@app.get("/phone")
+async def phone_ui():
+    """Serve phone mic capture UI."""
+    return HTMLResponse(content=open(Path(__file__).parent.parent / "phone-app" / "index.html").read())
+
+@app.get("/laptop")
+async def laptop_ui():
+    """Serve laptop insights UI."""
+    return HTMLResponse(content=open(Path(__file__).parent.parent / "laptop-ui" / "index.html").read())
+
+@app.get("/api/status")
+async def api_status():
     return {"status": "JARVIS is online", "recording": meeting_state.is_recording}
 
 @app.get("/health")

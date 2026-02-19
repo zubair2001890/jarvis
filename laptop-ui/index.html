@@ -326,7 +326,7 @@
     </div>
 
     <div class="connection-form">
-        <input type="text" id="serverUrl" placeholder="Server URL (ws://localhost:8000)" value="ws://localhost:8000">
+        <input type="text" id="serverUrl" placeholder="Server URL (auto-detected)">
         <button id="connectBtn">Connect</button>
     </div>
 
@@ -511,18 +511,22 @@
             updateQuestions();
         });
 
-        // Load saved URL
-        const savedUrl = localStorage.getItem('jarvis-server');
-        if (savedUrl) {
-            serverUrlInput.value = savedUrl;
+        // Auto-detect server URL or load saved
+        function getDefaultWsUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host || 'localhost:8000';
+            return `${protocol}//${host}`;
         }
+
+        const savedUrl = localStorage.getItem('jarvis-server');
+        serverUrlInput.value = savedUrl || getDefaultWsUrl();
 
         serverUrlInput.addEventListener('change', () => {
             localStorage.setItem('jarvis-server', serverUrlInput.value);
         });
 
         // Auto-connect on load
-        // connect();
+        connect();
     </script>
 </body>
 </html>
