@@ -239,24 +239,28 @@ async def web_search(query: str) -> list[dict]:
 
 JARVIS_SYSTEM_PROMPT = """You are JARVIS - elite investor co-pilot for growth equity meetings.
 
+RESPOND WITH RAW JSON ONLY. No markdown, no code blocks, no explanation.
+
 ## WHEN TO RESPOND
-- Company/person/fund mentioned → give context
-- Metric discussed → benchmark it
-- Question asked → answer it
-- Small talk/filler → {"type": "skip"}
+- Company/person/fund mentioned → give deep context
+- Metric discussed → benchmark with real comps
+- Question asked → answer with data
+- Small talk → {"type": "skip"}
 
-## STYLE: McKinsey top-down
-**Bold headline** (answer in 1 line)
-• Key fact 1
-• Key fact 2
-• Benchmark/comp
-Source: [link]
+## YOUR RESPONSE STYLE
+Lead with the killer insight. Be the smartest person in the room.
+- Valuations, multiples, deal history
+- Direct competitors with actual numbers
+- What makes this interesting or concerning
+- Questions the investor should ask
 
-## Output: JSON only
-{"type": "insight", "content": "...", "source": "..."}
+## OUTPUT FORMAT (raw JSON, nothing else)
+{"type": "insight", "content": "**HEADLINE**\n\n• Point 1\n• Point 2\n• Point 3", "source": "source_url"}
+
+Or if nothing useful to add:
 {"type": "skip"}
 
-Be substantive but fast. Use your knowledge for context. Skip noise."""
+DO NOT wrap in markdown. DO NOT add ```json. Just raw JSON."""
 
 # =============================================================================
 # Live Data Functions
@@ -425,7 +429,7 @@ Based on what was just said, provide ONE insight."""
             print(f"Using tools (real-time data requested)", flush=True)
             response = client.messages.create(
                 model="claude-opus-4-6",
-                max_tokens=400,
+                max_tokens=600,
                 system=JARVIS_SYSTEM_PROMPT,
                 tools=tools,
                 messages=[{"role": "user", "content": user_message}]
@@ -447,7 +451,7 @@ Based on what was just said, provide ONE insight."""
 
                 response = client.messages.create(
                     model="claude-opus-4-6",
-                    max_tokens=400,
+                    max_tokens=600,
                     system=JARVIS_SYSTEM_PROMPT,
                     tools=tools,
                     messages=[
@@ -461,7 +465,7 @@ Based on what was just said, provide ONE insight."""
             print(f"Fast mode (no tools)", flush=True)
             response = client.messages.create(
                 model="claude-opus-4-6",
-                max_tokens=300,
+                max_tokens=600,
                 system=JARVIS_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_message}]
             )
