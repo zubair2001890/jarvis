@@ -340,14 +340,21 @@ async def audio_websocket(websocket: WebSocket):
     try:
         # Connect to Deepgram streaming API
         deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true"
+        print(f"Connecting to Deepgram with key: {DEEPGRAM_API_KEY[:10]}...")
 
-        deepgram_ws = await ws_client.connect(
-            deepgram_url,
-            additional_headers=[("Authorization", f"Token {DEEPGRAM_API_KEY}")]
-        )
+        try:
+            deepgram_ws = await ws_client.connect(
+                deepgram_url,
+                additional_headers=[("Authorization", f"Token {DEEPGRAM_API_KEY}")]
+            )
+            print("Deepgram connected!")
+        except Exception as dg_err:
+            print(f"Deepgram connection failed: {dg_err}")
+            await websocket.send_json({"error": f"Deepgram connection failed: {str(dg_err)}"})
+            return
 
         await websocket.send_json({"status": "connected", "transcription": "deepgram"})
-        print("Connected to Deepgram")
+        print("Sent status to client")
 
         full_transcript = ""
         last_analysis_time = datetime.now()
