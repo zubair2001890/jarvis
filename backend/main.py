@@ -347,6 +347,7 @@ async def audio_websocket(websocket: WebSocket):
         )
 
         await websocket.send_json({"status": "connected", "transcription": "deepgram"})
+        print("Connected to Deepgram")
 
         full_transcript = ""
         last_analysis_time = datetime.now()
@@ -358,10 +359,12 @@ async def audio_websocket(websocket: WebSocket):
             try:
                 async for message in deepgram_ws:
                     data = json.loads(message)
+                    print(f"Deepgram msg type: {data.get('type')}")
 
                     if data.get("type") == "Results":
                         transcript = data.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
                         is_final = data.get("is_final", False)
+                        print(f"Transcript: '{transcript}' (final={is_final})")
 
                         if transcript:
                             # Send to UI
@@ -381,11 +384,14 @@ async def audio_websocket(websocket: WebSocket):
 
                                 # Analyze with Claude every 10 seconds if we have content
                                 now = datetime.now()
+                                print(f"Transcript length: {len(full_transcript)}, seconds since last: {(now - last_analysis_time).seconds}")
                                 if (now - last_analysis_time).seconds >= 10 and len(full_transcript) > 200:
                                     last_analysis_time = now
+                                    print("Calling Claude for analysis...")
 
                                     # Run Claude analysis
                                     insight = await analyze_with_claude(full_transcript[-2000:])
+                                    print(f"Claude response: {insight}")
 
                                     if insight.get("type") not in ["error", "skip"]:
                                         meeting_state.add_insight(insight)
