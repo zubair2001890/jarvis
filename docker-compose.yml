@@ -7,8 +7,8 @@ services:
       - "8000:8000"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - APP_PASSWORD=${APP_PASSWORD}
-      - WHISPER_MODEL=${WHISPER_MODEL:-base}
     restart: unless-stopped
     # Uncomment for GPU support (NVIDIA)
     # deploy:
