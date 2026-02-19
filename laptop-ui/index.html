@@ -114,7 +114,30 @@
             color: #22d3ee;
         }
         .insight-time { font-size: 0.75rem; color: #71717a; }
-        .insight-content { font-size: 1rem; line-height: 1.5; margin-bottom: 8px; }
+        .insight-content {
+            font-size: 0.95rem;
+            line-height: 1.7;
+            margin-bottom: 8px;
+        }
+        .insight-content strong { color: #f4f4f5; font-weight: 600; }
+        .insight-content ul {
+            margin: 10px 0 10px 8px;
+            padding: 0;
+            list-style: none;
+        }
+        .insight-content li {
+            position: relative;
+            padding-left: 16px;
+            margin-bottom: 6px;
+            color: #d4d4d8;
+        }
+        .insight-content li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #06b6d4;
+            font-weight: bold;
+        }
         .insight-source {
             font-size: 0.8rem;
             color: #a1a1aa;
@@ -291,6 +314,27 @@
             return new Date(ts || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         }
 
+        function formatInsightContent(content) {
+            // Convert **bold** to <strong>
+            let html = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Convert bullet lines (• or -) to list
+            const lines = html.split('\n');
+            let inList = false;
+            let result = [];
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                    if (!inList) { result.push('<ul>'); inList = true; }
+                    result.push('<li>' + trimmed.substring(1).trim() + '</li>');
+                } else {
+                    if (inList) { result.push('</ul>'); inList = false; }
+                    if (trimmed) result.push('<p>' + trimmed + '</p>');
+                }
+            }
+            if (inList) result.push('</ul>');
+            return result.join('');
+        }
+
         function renderInsight(insight) {
             const card = document.createElement('div');
             card.className = 'insight-card ' + (insight.type || 'fact') + ' ' + (insight.priority || '');
@@ -299,7 +343,7 @@
                     <span class="insight-type">${insight.type || 'fact'}</span>
                     <span class="insight-time">${formatTime(insight.timestamp)}</span>
                 </div>
-                <div class="insight-content">${insight.content || ''}</div>
+                <div class="insight-content">${formatInsightContent(insight.content || '')}</div>
                 ${insight.source ? `<div class="insight-source">Source: ${insight.source}</div>` : ''}
                 ${insight.data_point ? `<div class="insight-source">${insight.data_point}</div>` : ''}
             `;
