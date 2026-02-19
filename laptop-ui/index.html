@@ -182,11 +182,11 @@
 
     <div class="main-grid">
         <div class="insights-panel">
-            <h2>Live Facts</h2>
+            <h2>Live Insights</h2>
             <div id="insightsContainer">
                 <div class="empty-state">
-                    <div class="icon">&#128218;</div>
-                    <p>Facts with sources will appear here</p>
+                    <div class="icon">&#128161;</div>
+                    <p>Insights will appear here as you talk</p>
                 </div>
             </div>
         </div>
@@ -244,7 +244,7 @@
 
         function updateInsights() {
             if (insights.length === 0) {
-                insightsContainer.innerHTML = '<div class="empty-state"><div class="icon">&#128218;</div><p>Facts with sources will appear here</p></div>';
+                insightsContainer.innerHTML = '<div class="empty-state"><div class="icon">&#128161;</div><p>Insights will appear here as you talk</p></div>';
                 return;
             }
             insightsContainer.innerHTML = '';
@@ -268,8 +268,9 @@
                     insights = data.insights || [];
                     updateInsights();
                 }
-                if (data.type === 'transcript') {
-                    transcript.textContent = data.text;
+                if (data.type === 'transcript' && data.is_final) {
+                    transcript.textContent += data.text + ' ';
+                    transcript.scrollTop = transcript.scrollHeight;
                 }
                 if (data.type === 'fact' || data.type === 'context' || data.type === 'insight') {
                     insights.push(data);
@@ -314,8 +315,9 @@
 
                 audioWs.onmessage = (e) => {
                     const data = JSON.parse(e.data);
-                    if (data.type === 'transcript') {
-                        transcript.textContent = data.text;
+                    if (data.type === 'transcript' && data.is_final) {
+                        transcript.textContent += data.text + ' ';
+                        transcript.scrollTop = transcript.scrollHeight;
                     }
                 };
 
