@@ -304,7 +304,7 @@ Based on what was just said, provide ONE insight, question, or flag. Be specific
 
     try:
         response = client.messages.create(
-            model="claude-opus-4-5-20251101",
+            model="claude-opus-4-6",
             max_tokens=500,
             system=JARVIS_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}]
