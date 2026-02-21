@@ -614,11 +614,12 @@ async def audio_websocket(websocket: WebSocket):
                 print(f"Audio forward error: {e}")
 
         async def keepalive_deepgram():
-            """Send keepalive to Deepgram every 5 seconds."""
+            """Send keepalive to Deepgram every 3 seconds."""
             try:
                 while True:
-                    await asyncio.sleep(5)
-                    await deepgram_ws.send(json.dumps({"type": "KeepAlive"}))
+                    await asyncio.sleep(3)
+                    # Send empty audio frame as keepalive (more reliable than JSON)
+                    await deepgram_ws.send(bytes(320))  # 10ms of silence at 16kHz
             except Exception as e:
                 print(f"Keepalive error: {e}")
 
