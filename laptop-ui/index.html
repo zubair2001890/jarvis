@@ -302,6 +302,7 @@
         let processor = null;
         let source = null;
         let isRecording = false;
+        let intentionalStop = false;
         let insights = [];
 
         function getWsUrl() {
@@ -392,6 +393,7 @@
         }
 
         async function startRecording() {
+            intentionalStop = false;
             try {
                 const wsUrl = getWsUrl() + '/ws/audio';
                 console.log('Connecting to:', wsUrl);
@@ -445,8 +447,15 @@
                     }
                 };
 
-                audioWs.onclose = () => {
-                    if (isRecording) stopRecording();
+                audioWs.onclose = (event) => {
+                    console.log('Audio WebSocket closed:', event.code, event.reason);
+                    // Don't stop recording - try to reconnect instead
+                    if (isRecording && !intentionalStop) {
+                        console.log('Unexpected disconnect, reconnecting...');
+                        setTimeout(() => {
+                            if (isRecording) startRecording();
+                        }, 1000);
+                    }
                 };
 
             } catch (err) {
@@ -456,6 +465,7 @@
         }
 
         function stopRecording() {
+            intentionalStop = true;
             isRecording = false;
             recordBtn.classList.remove('recording');
             recordText.textContent = 'Record';
