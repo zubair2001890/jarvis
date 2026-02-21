@@ -546,6 +546,7 @@ async def audio_websocket(websocket: WebSocket):
         async def receive_from_deepgram():
             """Receive transcripts from Deepgram and forward to UI."""
             nonlocal full_transcript, last_analysis_time
+            print("receive_from_deepgram STARTED", flush=True)
 
             try:
                 async for message in deepgram_ws:
@@ -601,35 +602,42 @@ async def audio_websocket(websocket: WebSocket):
 
                                     asyncio.create_task(run_analysis(full_transcript[-2000:]))
             except Exception as e:
-                print(f"Deepgram receive error: {e}")
+                print(f"Deepgram receive error: {e}", flush=True)
+            print("receive_from_deepgram ENDED", flush=True)
 
         async def forward_audio_to_deepgram():
             """Forward audio from client to Deepgram."""
+            print("forward_audio_to_deepgram STARTED", flush=True)
             try:
                 while True:
                     data = await websocket.receive_bytes()
                     await deepgram_ws.send(data)
             except WebSocketDisconnect:
-                pass
+                print("forward_audio_to_deepgram: CLIENT DISCONNECTED", flush=True)
             except Exception as e:
-                print(f"Audio forward error: {e}")
+                print(f"forward_audio_to_deepgram ERROR: {e}", flush=True)
+            print("forward_audio_to_deepgram ENDED", flush=True)
 
         async def keepalive_deepgram():
             """Send keepalive to Deepgram every 3 seconds."""
+            print("keepalive_deepgram STARTED", flush=True)
             try:
                 while True:
                     await asyncio.sleep(3)
                     # Send empty audio frame as keepalive (more reliable than JSON)
                     await deepgram_ws.send(bytes(320))  # 10ms of silence at 16kHz
             except Exception as e:
-                print(f"Keepalive error: {e}")
+                print(f"keepalive_deepgram ERROR: {e}", flush=True)
+            print("keepalive_deepgram ENDED", flush=True)
 
-        # Run all tasks concurrently
-        await asyncio.gather(
+        # Run all tasks concurrently - use return_exceptions to prevent one failure from killing others
+        results = await asyncio.gather(
             receive_from_deepgram(),
             forward_audio_to_deepgram(),
-            keepalive_deepgram()
+            keepalive_deepgram(),
+            return_exceptions=True
         )
+        print(f"Tasks finished with results: {results}", flush=True)
 
     except Exception as e:
         print(f"Error in audio websocket: {e}")
