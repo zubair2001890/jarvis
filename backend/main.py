@@ -368,7 +368,8 @@ async def analyze_with_claude(
     if not ANTHROPIC_API_KEY:
         return {"type": "error", "content": "No Anthropic API key configured"}
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    # MUST use AsyncAnthropic to not block the event loop!
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
     # Build context from knowledge bases
     context_parts = []
@@ -427,7 +428,7 @@ Based on what was just said, provide ONE insight."""
         if needs_realtime:
             # Use tools for real-time data
             print(f"Using tools (real-time data requested)", flush=True)
-            response = client.messages.create(
+            response = await client.messages.create(
                 model="claude-opus-4-6",
                 max_tokens=600,
                 system=JARVIS_SYSTEM_PROMPT,
@@ -449,7 +450,7 @@ Based on what was just said, provide ONE insight."""
                             result = "Unknown tool"
                         tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
 
-                response = client.messages.create(
+                response = await client.messages.create(
                     model="claude-opus-4-6",
                     max_tokens=600,
                     system=JARVIS_SYSTEM_PROMPT,
@@ -463,7 +464,7 @@ Based on what was just said, provide ONE insight."""
         else:
             # Fast mode - no tools, just Claude's knowledge
             print(f"Fast mode (no tools)", flush=True)
-            response = client.messages.create(
+            response = await client.messages.create(
                 model="claude-opus-4-6",
                 max_tokens=600,
                 system=JARVIS_SYSTEM_PROMPT,
