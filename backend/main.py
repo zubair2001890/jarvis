@@ -521,7 +521,7 @@ async def audio_websocket(websocket: WebSocket):
 
     try:
         # Connect to Deepgram streaming API
-        deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true&diarize=true"
+        deepgram_url = "wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&model=nova-2&punctuate=true&interim_results=true&diarize=true&no_delay=true&endpointing=false"
         import sys
         print(f"Connecting to Deepgram with key: {DEEPGRAM_API_KEY[:10]}...", flush=True)
 
@@ -613,10 +613,20 @@ async def audio_websocket(websocket: WebSocket):
             except Exception as e:
                 print(f"Audio forward error: {e}")
 
-        # Run both tasks concurrently
+        async def keepalive_deepgram():
+            """Send keepalive to Deepgram every 5 seconds."""
+            try:
+                while True:
+                    await asyncio.sleep(5)
+                    await deepgram_ws.send(json.dumps({"type": "KeepAlive"}))
+            except Exception as e:
+                print(f"Keepalive error: {e}")
+
+        # Run all tasks concurrently
         await asyncio.gather(
             receive_from_deepgram(),
-            forward_audio_to_deepgram()
+            forward_audio_to_deepgram(),
+            keepalive_deepgram()
         )
 
     except Exception as e:
